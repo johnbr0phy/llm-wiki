@@ -278,4 +278,4 @@ Email digests contain many small updates across projects. Process each item inde
 7. **Update section indexes, not the top-level INDEX.md.** Only update the top-level count if it changed.
 8. **Always append to log.md.** Every compile writes an entry. Format: `## [YYYY-MM-DD] compile | Description`.
 9. **Decisions get date prefixes.** `YYYY-MM-DD_description.md` for chronological sorting.
-10. **Use parallel agents** for large compiles (multiple new sources across different projects).
+10. **Use agent teams (TeamCreate) for compiles. When processing multiple new sources, create a team so teammates can coordinate - e.g., one teammate updating a project article can tell another teammate updating the related person article what changed. Use Sonnet for teammates doing mechanical work (appending timeline rows, updating dates, adding source links). Use Opus for teammates that need judgment (writing new articles, resolving contradictions, generating TLDRs). Teammates should claim tasks from a shared task list and communicate directly when their work overlaps (same person mentioned in two sources, same project updated by two teammates, etc.).
