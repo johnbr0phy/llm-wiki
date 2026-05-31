@@ -110,7 +110,8 @@ class WikiVoice:
         self.loop = asyncio.get_running_loop()
         url = f"wss://api.openai.com/v1/realtime?model={self.model}"
         headers = {"Authorization": f"Bearer {api_key}"}
-        if os.environ.get("WIKI_VOICE_BETA_HEADER", "1") == "1":
+        # The old beta session shape is disabled server-side; opt in only if asked.
+        if os.environ.get("WIKI_VOICE_BETA_HEADER") == "1":
             headers["OpenAI-Beta"] = "realtime=v1"
 
         async with websockets.connect(url, additional_headers=headers, max_size=None) as ws:
@@ -128,19 +129,28 @@ class WikiVoice:
             await asyncio.gather(self._sender(ws), self._receiver(ws))
 
     async def _configure_session(self, ws) -> None:  # noqa: ANN001
+        # GA Realtime session shape: type "realtime", nested audio config.
         session = {
-            "modalities": ["audio", "text"],
+            "type": "realtime",
+            "model": self.model,
+            "output_modalities": ["audio"],
             "instructions": wiki_context.build_instructions(),
-            "voice": self.voice,
-            "input_audio_format": "pcm16",
-            "output_audio_format": "pcm16",
-            "input_audio_transcription": {"model": "whisper-1"},
-            "turn_detection": {
-                "type": "server_vad",
-                "threshold": 0.5,
-                "prefix_padding_ms": 300,
-                "silence_duration_ms": 600,
-                "create_response": True,
+            "audio": {
+                "input": {
+                    "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
+                    "transcription": {"model": "whisper-1"},
+                    "turn_detection": {
+                        "type": "server_vad",
+                        "threshold": 0.5,
+                        "prefix_padding_ms": 300,
+                        "silence_duration_ms": 600,
+                        "create_response": True,
+                    },
+                },
+                "output": {
+                    "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
+                    "voice": self.voice,
+                },
             },
             "tools": wiki_context.TOOL_SCHEMAS,
             "tool_choice": "auto",
