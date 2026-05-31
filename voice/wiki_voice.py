@@ -29,6 +29,23 @@ import websockets
 
 import wiki_context
 
+
+def _load_dotenv() -> None:
+    """Load KEY=VALUE lines from a local .env (no dependency). Existing env wins."""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.isfile(env_path):
+        return
+    with open(env_path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
+_load_dotenv()
+
 SAMPLE_RATE = 24000          # gpt-realtime audio is pcm16, 24 kHz, mono, LE
 CHANNELS = 1
 BLOCK = 1200                 # 50 ms per audio block

@@ -74,6 +74,7 @@ llm-wiki/
 │   ├── decisions/             <- Major decisions, date-prefixed
 │   ├── concepts/              <- Cross-cutting patterns and ideas
 │   └── timeline/              <- Quarterly summaries
+├── voice/                     <- Talk to your wiki (realtime voice, see voice/README.md)
 └── raw/
     ├── .manifest.json         <- Tracks what's been compiled
     ├── calls/                 <- Meeting transcripts, summaries
@@ -118,6 +119,24 @@ pip install markdown
 python build_wiki.py
 open wiki-site.html
 ```
+
+## Optional: Talk to Your Wiki 🎙️
+
+`voice/` adds a realtime voice interface: press a global hotkey, ask a question
+out loud, and hear your wiki answer back. It connects to OpenAI's
+`gpt-realtime-2` speech-to-speech model and grounds every answer in `wiki/` via
+`search_wiki` / `read_article` tools — the same INDEX → TLDR → article read-path
+Claude uses.
+
+```bash
+cd voice
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+export OPENAI_API_KEY=sk-...
+python wiki_voice.py        # press Ctrl+Option+W to talk
+```
+
+See [`voice/README.md`](voice/README.md) for setup, permissions, and options.
 
 ## Customization
 
