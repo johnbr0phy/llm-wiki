@@ -102,3 +102,23 @@ When creating any new file, save it to the correct `raw/` folder by type:
   - [Person Name](wiki/people/person-name.md)
   ```
 - **All new files go to `raw/`.** Nothing gets saved to the root or to `wiki/` directly.
+
+## Wiki Voice (`voice/`)
+
+`voice/` is an optional realtime voice interface: press a global hotkey, ask a
+question out loud, and hear the wiki answer back (OpenAI `gpt-realtime-2`,
+grounded in `wiki/` via tools). It runs locally on the user's machine.
+
+When the user asks to "set up / run the wiki voice" (or gives you their OpenAI
+API key for it):
+
+1. Run `OPENAI_API_KEY=sk-<theirs> ./voice/setup.sh` (installs PortAudio, creates
+   the venv + installs deps, creates `voice/.env`, and writes the key into it).
+   If they didn't give a key, run `./voice/setup.sh` and tell them to put their
+   key in `voice/.env`.
+2. Launch with `./voice/run.sh` (flags pass through, e.g. `--voice cedar`).
+3. Remind them macOS needs **Microphone** + **Accessibility** permission for the
+   terminal app the first time (the global hotkey depends on Accessibility).
+
+Never commit `voice/.env` or an API key — `.env` is gitignored; keep it that way.
+See `voice/README.md` for details.

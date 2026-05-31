@@ -130,13 +130,14 @@ Claude uses.
 
 ```bash
 cd voice
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-export OPENAI_API_KEY=sk-...
-python wiki_voice.py        # press Ctrl+Option+W to talk
+./setup.sh                 # installs everything, creates .env
+# add your OpenAI API key to voice/.env, then:
+./run.sh                   # press Ctrl+Option+W to talk
 ```
 
-See [`voice/README.md`](voice/README.md) for setup, permissions, and options.
+Or hand the repo to Claude and say *"set up and run the wiki voice, my OpenAI
+key is sk-..."* — it'll do the rest. See [`voice/README.md`](voice/README.md)
+for permissions and options.
 
 ## Customization
 

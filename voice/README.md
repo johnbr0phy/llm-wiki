@@ -22,30 +22,49 @@ retrieval on its own; the tools are how the model reaches your wiki.
 
 Everything runs locally on your Mac and in one process — no extra server.
 
-## Setup (macOS)
-
-1. **Python 3.10+** and PortAudio (for the audio library):
-   ```bash
-   brew install portaudio
-   cd voice
-   python3 -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-2. **API key:**
-   ```bash
-   export OPENAI_API_KEY=sk-...
-   ```
-
-3. **Grant permissions** to the app you run this from (Terminal, iTerm, etc.) in
-   **System Settings → Privacy & Security**:
-   - **Microphone** (to capture your voice)
-   - **Accessibility** (so the global hotkey works system-wide)
-
-## Run
+## Quick start (macOS)
 
 ```bash
+cd voice
+./setup.sh                 # installs everything (portaudio, venv, deps), makes .env
+# put your OpenAI API key in voice/.env (replace sk-...)
+./run.sh                   # press Ctrl+Option+W to talk
+```
+
+That's it. `setup.sh` is idempotent — re-run it any time. The only thing you
+provide is your **OpenAI API key**.
+
+### Handing this to Claude
+
+If you'd rather let Claude do it, open this folder in Claude Code and say:
+
+> Set up and run the wiki voice. My OpenAI API key is `sk-...`
+
+Claude will run `setup.sh`, drop your key into `.env`, and launch it.
+
+### First-run permissions
+
+The first time you run it, macOS prompts for **Microphone** (allow it). For the
+global hotkey, grant your terminal app **Accessibility**: System Settings →
+Privacy & Security → Accessibility → enable Terminal/iTerm, then relaunch.
+
+<details>
+<summary>Manual setup (if you prefer not to use the scripts)</summary>
+
+```bash
+brew install portaudio
+cd voice
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+export OPENAI_API_KEY=sk-...
 python wiki_voice.py
+```
+</details>
+
+## Using it
+
+```bash
+./run.sh
 ```
 
 - Press the hotkey (**Ctrl + Option (⌥) + W** by default) to **toggle listening**.
@@ -57,11 +76,11 @@ python wiki_voice.py
 ### Options
 
 ```bash
-# In hotkey strings, <alt> = the Option (⌥) key on macOS, <cmd> = Command (⌘).
-python wiki_voice.py --hotkey '<ctrl>+<alt>+space'   # = Ctrl + Option + Space
-python wiki_voice.py --voice cedar                   # change the voice
-python wiki_voice.py --model gpt-realtime-2          # change the model
-python wiki_voice.py --debug                         # print raw server events
+# Flags pass through run.sh. In hotkey strings, <alt> = Option (⌥), <cmd> = Command (⌘).
+./run.sh --hotkey '<ctrl>+<alt>+space'   # = Ctrl + Option + Space
+./run.sh --voice cedar                   # change the voice
+./run.sh --model gpt-realtime-2          # change the model
+./run.sh --debug                         # print raw server events
 ```
 
 Environment overrides: `WIKI_VOICE_MODEL`, `WIKI_VOICE_VOICE`,
