@@ -6,7 +6,7 @@ is grounded in your wiki via two tools (see wiki_context.py).
 
 Usage:
     export OPENAI_API_KEY=sk-...
-    python wiki_voice.py                 # press Ctrl+Alt+W to toggle listening
+    python wiki_voice.py                 # press Ctrl+Option+W (⌥) to toggle listening
     python wiki_voice.py --debug         # print raw server events
     python wiki_voice.py --hotkey '<ctrl>+<alt>+space'
 
@@ -235,7 +235,17 @@ def main() -> None:
 
     hotkeys = keyboard.GlobalHotKeys({args.hotkey: app.toggle})
     hotkeys.start()
-    print(f"Hotkey: {args.hotkey}  (toggle listening)")
+    # On macOS pynput's <alt> is the Option (⌥) key; show a friendly label.
+    pretty = (
+        args.hotkey.replace("<ctrl>", "Ctrl")
+        .replace("<alt>", "Option(⌥)")
+        .replace("<cmd>", "Cmd(⌘)")
+        .replace("<shift>", "Shift")
+        .replace("+", " + ")
+        .replace("<", "")
+        .replace(">", "")
+    )
+    print(f"Hotkey: {pretty}  (toggle listening)")
 
     try:
         asyncio.run(app.run())

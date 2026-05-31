@@ -48,7 +48,7 @@ Everything runs locally on your Mac and in one process — no extra server.
 python wiki_voice.py
 ```
 
-- Press the hotkey (**Ctrl + Alt + W** by default) to **toggle listening**.
+- Press the hotkey (**Ctrl + Option (⌥) + W** by default) to **toggle listening**.
 - Speak; pause when done — server-side voice detection ends your turn and the
   model replies out loud. Keep talking for a back-and-forth conversation.
 - Start talking while it's speaking to **interrupt** (barge-in).
@@ -57,7 +57,8 @@ python wiki_voice.py
 ### Options
 
 ```bash
-python wiki_voice.py --hotkey '<ctrl>+<alt>+space'   # change the hotkey
+# In hotkey strings, <alt> = the Option (⌥) key on macOS, <cmd> = Command (⌘).
+python wiki_voice.py --hotkey '<ctrl>+<alt>+space'   # = Ctrl + Option + Space
 python wiki_voice.py --voice cedar                   # change the voice
 python wiki_voice.py --model gpt-realtime-2          # change the model
 python wiki_voice.py --debug                         # print raw server events
