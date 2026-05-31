@@ -82,7 +82,9 @@ class WikiVoice:
         self.listening = False
         self.player = Player()
         self.loop: asyncio.AbstractEventLoop | None = None
-        self.audio_q: asyncio.Queue[bytes] = asyncio.Queue()
+        # Created inside run(); on Python 3.9 a Queue binds to the loop that
+        # exists at construction time, so it must be made within the running loop.
+        self.audio_q: asyncio.Queue[bytes] | None = None
         self._assistant_line = ""
 
     # --- audio capture (runs in PortAudio thread) --------------------------
@@ -108,6 +110,7 @@ class WikiVoice:
             sys.exit("OPENAI_API_KEY is not set.")
 
         self.loop = asyncio.get_running_loop()
+        self.audio_q = asyncio.Queue()
         url = f"wss://api.openai.com/v1/realtime?model={self.model}"
         headers = {"Authorization": f"Bearer {api_key}"}
         # The old beta session shape is disabled server-side; opt in only if asked.
