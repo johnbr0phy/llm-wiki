@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>llm-wiki — your knowledge base, compiled by an LLM</title>
+  <meta name="description" content="A personal knowledge base that an LLM maintains for you. Drop raw data in, run the compiler, and get a structured, interlinked wiki you can query instantly." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9A%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-soft: #161b22;
+      --bg-card: #1b222c;
+      --border: #2d333b;
+      --fg: #e6edf3;
+      --fg-muted: #9da7b3;
+      --accent: #6ea8fe;
+      --accent-2: #b694ff;
+      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    header.hero {
+      position: relative;
+      overflow: hidden;
+      padding: 96px 0 72px;
+      text-align: center;
+      background:
+        radial-gradient(900px 400px at 50% -10%, rgba(110,168,254,0.18), transparent 70%),
+        radial-gradient(700px 300px at 80% 10%, rgba(182,148,255,0.14), transparent 70%);
+      border-bottom: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--fg-muted);
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      line-height: 1.05;
+      margin: 0 0 16px;
+      letter-spacing: -0.02em;
+      background: linear-gradient(120deg, var(--fg), var(--accent) 60%, var(--accent-2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p.lede {
+      font-size: clamp(1.05rem, 2.5vw, 1.3rem);
+      color: var(--fg-muted);
+      max-width: 640px;
+      margin: 0 auto 32px;
+    }
+    .cta {
+      display: inline-flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 15px;
+      transition: transform .08s ease, box-shadow .2s ease;
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-1px); }
+    .btn-primary {
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      color: #0b0f14;
+      box-shadow: 0 6px 24px rgba(110,168,254,0.25);
+    }
+    .btn-secondary {
+      background: var(--bg-soft);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+
+    /* Flow diagram */
+    .flow {
+      margin: 48px auto 0;
+      max-width: 720px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 8px;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+    .flow .node {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 10px;
+      color: var(--fg);
+    }
+    .flow .node small { display: block; color: var(--fg-muted); margin-top: 4px; font-size: 11px; }
+    .flow .arrow { color: var(--accent); font-size: 20px; }
+    @media (max-width: 640px) {
+      .flow { grid-template-columns: 1fr; }
+      .flow .arrow { transform: rotate(90deg); }
+    }
+
+    /* Sections */
+    section { padding: 72px 0; border-bottom: 1px solid var(--border); }
+    section h2 {
+      font-size: clamp(1.6rem, 4vw, 2.2rem);
+      margin: 0 0 12px;
+      letter-spacing: -0.01em;
+    }
+    section .sub { color: var(--fg-muted); margin: 0 0 40px; max-width: 620px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      transition: border-color .2s ease, transform .08s ease;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .card .ico { font-size: 26px; margin-bottom: 12px; }
+    .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+    .card p { margin: 0; color: var(--fg-muted); font-size: 0.95rem; }
+
+    /* Ops */
+    .ops { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+    .op { display: flex; gap: 16px; align-items: flex-start; }
+    .op .num {
+      flex: none;
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border-radius: 9px;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      font-family: var(--mono);
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .op h3 { margin: 4px 0 4px; font-size: 1.05rem; }
+    .op p { margin: 0; color: var(--fg-muted); font-size: 0.95rem; }
+
+    /* Code block */
+    pre {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: var(--fg);
+    }
+    pre .c { color: var(--fg-muted); }
+    pre .k { color: var(--accent-2); }
+
+    /* Footer */
+    footer {
+      padding: 48px 0 64px;
+      text-align: center;
+      color: var(--fg-muted);
+      font-size: 14px;
+    }
+    footer a { color: var(--fg-muted); }
+    footer a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <span class="badge">📚 LLM-compiled knowledge base</span>
+      <h1>llm-wiki</h1>
+      <p class="lede">
+        A personal knowledge base that an LLM maintains for you. Drop raw data in —
+        call transcripts, emails, docs — run the compiler, and get a structured,
+        interlinked wiki you can query instantly.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/johnbr0phy/llm-wiki">View on GitHub</a>
+        <a class="btn btn-secondary" href="#how">How it works</a>
+      </div>
+
+      <div class="flow">
+        <div class="node">Raw files in<small>transcripts · emails · docs</small></div>
+        <div class="arrow">→</div>
+        <div class="node">LLM compiles<small>reads new data</small></div>
+        <div class="arrow">→</div>
+        <div class="node">Wiki updates<small>articles you can query</small></div>
+      </div>
+    </div>
+  </header>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>Two layers, one source of truth</h2>
+      <p class="sub">Your source material stays untouched. The LLM owns the compiled layer you read and query.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="ico">📥</div>
+          <h3>raw/</h3>
+          <p>Your source material. Transcripts, emails, docs. Never edited by the LLM — it's the ground truth.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🗂️</div>
+          <h3>wiki/</h3>
+          <p>LLM-compiled articles. Structured, interlinked, searchable. The LLM maintains this — you read it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Three operations</h2>
+      <p class="sub">The whole system runs on a simple loop: ingest, query, lint.</p>
+      <div class="ops">
+        <div class="op">
+          <div class="num">1</div>
+          <div>
+            <h3>Ingest</h3>
+            <p>Drop a new file in <code>raw/</code>, run the compiler, and the wiki updates incrementally.</p>
+          </div>
+        </div>
+        <div class="op">
+          <div class="num">2</div>
+          <div>
+            <h3>Query</h3>
+            <p>Ask a question. The LLM reads the wiki and gives you a sourced, cited answer.</p>
+          </div>
+        </div>
+        <div class="op">
+          <div class="num">3</div>
+          <div>
+            <h3>Lint</h3>
+            <p>Periodic health checks find contradictions, stale content, and broken links.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Five article types</h2>
+      <p class="sub">The wiki organizes everything it learns into interlinked sections.</p>
+      <div class="grid">
+        <div class="card"><div class="ico">🚀</div><h3>Projects</h3><p>Initiatives with status, ownership, decisions, open questions, and timeline.</p></div>
+        <div class="card"><div class="ico">👤</div><h3>People</h3><p>Cross-project profiles: what each person owns and their recent activity.</p></div>
+        <div class="card"><div class="ico">⚖️</div><h3>Decisions</h3><p>Date-stamped records of significant choices — what, why, and what it affected.</p></div>
+        <div class="card"><div class="ico">💡</div><h3>Concepts</h3><p>Patterns and ideas that span multiple projects.</p></div>
+        <div class="card"><div class="ico">🗓️</div><h3>Timeline</h3><p>Quarterly summaries of what happened versus what was planned.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Get started in minutes</h2>
+      <p class="sub">Open the folder in Claude Code or Cowork, drop in your first files, and compile.</p>
+<pre><span class="c"># 1. Drop source material into the right folder</span>
+raw/calls/2025-06-15_Sprint-Review_Summary.md
+raw/email/2025-06-16_Weekly-Digest.md
+raw/docs/2025-06-10_Product-Spec.md
+
+<span class="c"># 2. Tell Claude</span>
+<span class="k">"compile the wiki"</span>
+
+<span class="c"># 3. Ask anything</span>
+<span class="k">"What's the current state of Project X?"</span>
+<span class="k">"What has Sarah been involved in this quarter?"</span>
+<span class="k">"What's on my plate this week?"</span></pre>
+    </div>
+  </section>
+
+  <section style="border-bottom:none;">
+    <div class="wrap">
+      <h2>🎙️ Talk to your wiki</h2>
+      <p class="sub">
+        An optional realtime voice interface: press a global hotkey, ask a question
+        out loud, and hear your wiki answer back — grounded in <code>wiki/</code> via
+        the same index → TLDR → article read-path Claude uses.
+      </p>
+      <a class="btn btn-secondary" href="https://github.com/johnbr0phy/llm-wiki/tree/main/voice">See voice setup →</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <p>
+        Built with <a href="https://github.com/johnbr0phy/llm-wiki">llm-wiki</a> ·
+        Inspired by <a href="https://x.com/karpathy/status/1908244578702254571">Karpathy's LLM-as-knowledge-compiler</a> ·
+        Maintained by Claude
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
