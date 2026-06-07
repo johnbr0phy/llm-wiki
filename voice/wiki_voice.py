@@ -2,13 +2,13 @@
 
 A minimal terminal app that connects to OpenAI's gpt-realtime-2 over a
 WebSocket, streams mic audio, and plays the model's spoken reply. The model
-is grounded in your wiki via two tools (see wiki_context.py).
+is grounded in your wiki via read/maintain tools (see wiki_context.py).
 
 Usage:
     export OPENAI_API_KEY=sk-...
-    python wiki_voice.py                 # press Ctrl+Option+W (⌥) to toggle listening
+    python wiki_voice.py                 # press Option+Space to toggle listening
     python wiki_voice.py --debug         # print raw server events
-    python wiki_voice.py --hotkey '<ctrl>+<alt>+space'
+    python wiki_voice.py --hotkey '<ctrl>+space'
 
 Requires macOS Accessibility + Microphone permission for your terminal app
 (System Settings -> Privacy & Security). See README.md.
@@ -51,7 +51,25 @@ CHANNELS = 1
 BLOCK = 1200                 # 50 ms per audio block
 DEFAULT_MODEL = os.environ.get("WIKI_VOICE_MODEL", "gpt-realtime-2")
 DEFAULT_VOICE = os.environ.get("WIKI_VOICE_VOICE", "marin")
-DEFAULT_HOTKEY = os.environ.get("WIKI_VOICE_HOTKEY", "<ctrl>+<alt>+w")
+DEFAULT_HOTKEY = os.environ.get("WIKI_VOICE_HOTKEY", "<alt>+<space>")
+
+
+def normalize_hotkey(hotkey: str) -> str:
+    """pynput requires special keys wrapped in <>, e.g. <space> not space."""
+    special = {
+        "space", "enter", "tab", "esc", "escape", "backspace", "delete",
+        "up", "down", "left", "right", "home", "end", "page_up", "page_down",
+    }
+    parts = []
+    for part in hotkey.split("+"):
+        part = part.strip()
+        if part.startswith("<") and part.endswith(">"):
+            parts.append(part)
+        elif part.lower() in special:
+            parts.append(f"<{part.lower()}>")
+        else:
+            parts.append(part)
+    return "+".join(parts)
 
 
 class Player:
@@ -103,6 +121,8 @@ class WikiVoice:
         # exists at construction time, so it must be made within the running loop.
         self.audio_q: asyncio.Queue[bytes] | None = None
         self._assistant_line = ""
+        self._response_active = False
+        self._pending_session_refresh = False
 
     # --- audio capture (runs in PortAudio thread) --------------------------
     def _mic_callback(self, indata, frames, time_info, status) -> None:  # noqa: ANN001
@@ -148,9 +168,9 @@ class WikiVoice:
             print(f"Connected to {self.model}. Toggle the hotkey to start talking. Ctrl+C to quit.")
             await asyncio.gather(self._sender(ws), self._receiver(ws))
 
-    async def _configure_session(self, ws) -> None:  # noqa: ANN001
+    def _session_payload(self) -> dict:
         # GA Realtime session shape: type "realtime", nested audio config.
-        session = {
+        return {
             "type": "realtime",
             "model": self.model,
             "output_modalities": ["audio"],
@@ -175,7 +195,27 @@ class WikiVoice:
             "tools": wiki_context.TOOL_SCHEMAS,
             "tool_choice": "auto",
         }
-        await ws.send(json.dumps({"type": "session.update", "session": session}))
+
+    async def _configure_session(self, ws) -> None:  # noqa: ANN001
+        await ws.send(
+            json.dumps({"type": "session.update", "session": self._session_payload()})
+        )
+
+    async def _refresh_session(self, ws) -> None:  # noqa: ANN001
+        """Push an updated wiki map after compile_wiki changes articles."""
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "session.update",
+                    "session": {
+                        "type": "realtime",
+                        "instructions": wiki_context.build_instructions(),
+                    },
+                }
+            )
+        )
+        if self.debug:
+            print("\n[session] refreshed wiki instructions")
 
     async def _sender(self, ws) -> None:  # noqa: ANN001
         while True:
@@ -202,14 +242,25 @@ class WikiVoice:
                 self._assistant_line += event.get("delta", "")
                 print(event.get("delta", ""), end="", flush=True)
 
+            elif etype in ("response.created", "response.started"):
+                self._response_active = True
+
             elif etype in (
                 "response.audio_transcript.done",
                 "response.output_audio_transcript.done",
-                "response.done",
             ):
                 if self._assistant_line:
                     print()
                     self._assistant_line = ""
+
+            elif etype == "response.done":
+                self._response_active = False
+                if self._assistant_line:
+                    print()
+                    self._assistant_line = ""
+                if self._pending_session_refresh:
+                    self._pending_session_refresh = False
+                    await self._refresh_session(ws)
 
             elif etype == "conversation.item.input_audio_transcription.completed":
                 print(f"\n🗣️  you: {event.get('transcript', '').strip()}")
@@ -233,7 +284,16 @@ class WikiVoice:
             args = {}
         if self.debug:
             print(f"\n[tool] {name}({args})")
-        result = wiki_context.call_tool(name, args)
+        if wiki_context.is_blocking_tool(name):
+            print(f"\n⏳ {name}…")
+            result = await asyncio.to_thread(wiki_context.call_tool, name, args)
+            print(f"✓ {name} done")
+        else:
+            result = wiki_context.call_tool(name, args)
+        if wiki_context.should_refresh_session(name):
+            # Defer until the post-tool response finishes — mid-flight
+            # session.update was breaking the Realtime session (missing type).
+            self._pending_session_refresh = True
         await ws.send(
             json.dumps(
                 {
@@ -246,6 +306,14 @@ class WikiVoice:
                 }
             )
         )
+        await self._request_response(ws)
+
+    async def _request_response(self, ws) -> None:  # noqa: ANN001
+        """Ask for the next model turn; avoid overlapping response.create calls."""
+        for attempt in range(20):
+            if not self._response_active:
+                break
+            await asyncio.sleep(0.1)
         await ws.send(json.dumps({"type": "response.create"}))
 
 
@@ -254,7 +322,7 @@ def main() -> None:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--voice", default=DEFAULT_VOICE)
     parser.add_argument("--hotkey", default=DEFAULT_HOTKEY,
-                        help="pynput hotkey, e.g. '<ctrl>+<alt>+w'")
+                        help="pynput hotkey, e.g. '<ctrl>+space'")
     parser.add_argument("--debug", action="store_true", help="print raw server events")
     args = parser.parse_args()
 
@@ -263,14 +331,16 @@ def main() -> None:
     # Global hotkey listener (pynput) runs in its own thread.
     from pynput import keyboard
 
-    hotkeys = keyboard.GlobalHotKeys({args.hotkey: app.toggle})
+    hotkey = normalize_hotkey(args.hotkey)
+    hotkeys = keyboard.GlobalHotKeys({hotkey: app.toggle})
     hotkeys.start()
     # On macOS pynput's <alt> is the Option (⌥) key; show a friendly label.
     pretty = (
-        args.hotkey.replace("<ctrl>", "Ctrl")
+        hotkey.replace("<ctrl>", "Ctrl")
         .replace("<alt>", "Option(⌥)")
         .replace("<cmd>", "Cmd(⌘)")
         .replace("<shift>", "Shift")
+        .replace("<space>", "Space")
         .replace("+", " + ")
         .replace("<", "")
         .replace(">", "")

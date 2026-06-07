@@ -1,12 +1,20 @@
 # Wiki Voice 🎙️
 
 Press a global hotkey, ask a question out loud, and hear your wiki answer back —
-a realtime voice conversation grounded in this repo's `wiki/`.
+or dictate notes and compile them into the wiki by voice.
 
 It connects to OpenAI's **`gpt-realtime-2`** speech-to-speech model over a
 WebSocket. The model is given a compact *map* of the wiki (all indexes + every
-article's TLDR) and two tools — `search_wiki` and `read_article` — so it can
-pull detail on demand. This mirrors the read-path in the repo's `CLAUDE.md`
+article's TLDR + pending raw files) and four tools:
+
+| Tool | Purpose |
+|------|---------|
+| `search_wiki` | Find relevant articles |
+| `read_article` | Read full article text |
+| `save_voice_note` | Dictate a note → `raw/` |
+| `compile_wiki` | Fold pending `raw/` into `wiki/` |
+
+This mirrors the read-path in the repo's `CLAUDE.md`
 (INDEX → section INDEX → TLDRs → full article). The Realtime API does not do
 retrieval on its own; the tools are how the model reaches your wiki.
 
@@ -15,10 +23,15 @@ retrieval on its own; the tools are how the model reaches your wiki.
 ```
  hotkey ──toggle──► mic (24kHz PCM16) ──WebSocket──► gpt-realtime-2
                                                         │  speaks reply (audio)
-   search_wiki / read_article  ◄──tool calls──────────┘  reads your wiki/*.md
+   search / read / save / compile  ◄──tool calls─────┘
         │
-        └── wiki/  (markdown articles, the source of truth)
+        ├── wiki/   (compiled articles)
+        └── raw/    (voice notes land here, then compile_wiki updates wiki/)
 ```
+
+`compile_wiki` uses a separate OpenAI chat call (`WIKI_COMPILE_MODEL`, default
+`gpt-4.1`) with the `skills/compile-wiki/SKILL.md` workflow. It can take 10–60
+seconds; the voice agent tells you to wait while it runs.
 
 Everything runs locally on your Mac and in one process — no extra server.
 
@@ -28,11 +41,11 @@ Everything runs locally on your Mac and in one process — no extra server.
 cd voice
 ./setup.sh                 # installs everything (portaudio, venv, deps), makes .env
 # put your OpenAI API key in voice/.env (replace sk-...)
-./run.sh                   # press Ctrl+Option+W to talk
+./run.sh                   # press Option+Space to talk
 ```
 
 That's it. `setup.sh` is idempotent — re-run it any time. The only thing you
-provide is your **OpenAI API key**.
+provide is your **OpenAI API key** (used for both realtime voice and compile).
 
 ### Handing this to Claude
 
@@ -67,9 +80,12 @@ python wiki_voice.py
 ./run.sh
 ```
 
-- Press the hotkey (**Ctrl + Option (⌥) + W** by default) to **toggle listening**.
+- Press the hotkey (**Option (⌥) + Space** by default) to **toggle listening**.
+- **Query:** "What's the status of project X?" — searches and reads the wiki.
+- **Remember:** "Note that we decided to use Postgres for auth" — saves to `raw/calls/`, then offers to compile.
+- **Compile:** "Update the wiki" — runs `compile_wiki` on pending raw files.
 - Speak; pause when done — server-side voice detection ends your turn and the
-  model replies out loud. Keep talking for a back-and-forth conversation.
+  model replies out loud.
 - Start talking while it's speaking to **interrupt** (barge-in).
 - Toggle the hotkey again to mute. **Ctrl + C** to quit.
 
@@ -77,20 +93,22 @@ python wiki_voice.py
 
 ```bash
 # Flags pass through run.sh. In hotkey strings, <alt> = Option (⌥), <cmd> = Command (⌘).
-./run.sh --hotkey '<ctrl>+<alt>+space'   # = Ctrl + Option + Space
+./run.sh --hotkey '<ctrl>+;'              # e.g. Ctrl + ; (another free combo)
 ./run.sh --voice cedar                   # change the voice
 ./run.sh --model gpt-realtime-2          # change the model
 ./run.sh --debug                         # print raw server events
 ```
 
 Environment overrides: `WIKI_VOICE_MODEL`, `WIKI_VOICE_VOICE`,
-`WIKI_VOICE_HOTKEY`, `WIKI_VOICE_WIKI_DIR`, `WIKI_VOICE_BETA_HEADER`.
+`WIKI_VOICE_HOTKEY`, `WIKI_VOICE_WIKI_DIR`, `WIKI_VOICE_BETA_HEADER`,
+`WIKI_COMPILE_MODEL`, `WIKI_COMPILE_MAX_ITERATIONS`.
 
 ## Cost note
 
 `gpt-realtime-2` bills audio tokens (~$32/1M in, $64/1M out as of May 2026).
 Voice chat adds up; the wiki map sits in the cached system prompt, and the tools
-keep retrieved context tight to limit spend.
+keep retrieved context tight to limit spend. `compile_wiki` adds a separate chat
+call per compile (cheaper than realtime, but still token-based).
 
 ## Troubleshooting
 
@@ -102,9 +120,11 @@ keep retrieved context tight to limit spend.
   `wiki_voice.py` (e.g. nested `audio` config vs. the flat fields used here).
 - **`additional_headers` error** → upgrade `websockets` (older versions used
   `extra_headers`).
+- **compile_wiki fails** → run with `--debug`, check `WIKI_COMPILE_MODEL`, or
+  compile manually in Claude Code ("compile the wiki").
 
 ## Files
 
 - `wiki_voice.py` — realtime client: audio, hotkey, WebSocket, tool dispatch.
-- `wiki_context.py` — wiki loading, the `search_wiki`/`read_article` tools, and
-  the system instructions.
+- `wiki_context.py` — wiki tools, system instructions, save/compile entry points.
+- `wiki_compiler.py` — OpenAI-powered incremental compile engine.

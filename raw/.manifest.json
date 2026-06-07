@@ -1,0 +1,75 @@
+{
+  "last_compile": "2026-06-07T00:25:54Z",
+  "processed": {
+    "docs/2026-01-15_Caliper-Company-Overview_Strategy.md": {
+      "processed_at": "2026-06-07T00:14:26Z",
+      "size": 2388,
+      "affected_articles": [
+        "projects/caliper-atlas.md",
+        "projects/caliper-beacon.md",
+        "projects/caliper-platform-migration.md"
+      ]
+    },
+    "docs/2026-02-01_Caliper-Platform-Architecture_Spec.md": {
+      "processed_at": "2026-06-07T00:14:26Z",
+      "size": 2052,
+      "affected_articles": [
+        "projects/caliper-atlas.md",
+        "projects/caliper-beacon.md",
+        "projects/caliper-platform-migration.md"
+      ]
+    },
+    "calls/2026-02-14_Caliper-Warehouse-Decision_Summary.md": {
+      "processed_at": "2026-06-07T00:14:26Z",
+      "size": 1206,
+      "affected_articles": [
+        "projects/caliper-atlas.md",
+        "projects/caliper-beacon.md",
+        "projects/caliper-platform-migration.md"
+      ]
+    },
+    "calls/2026-03-10_Caliper-Q1-Kickoff_Summary.md": {
+      "processed_at": "2026-06-07T00:14:26Z",
+      "size": 2125,
+      "affected_articles": [
+        "projects/caliper-atlas.md",
+        "projects/caliper-beacon.md",
+        "projects/caliper-platform-migration.md"
+      ]
+    },
+    "calls/2026-04-22_Caliper-Atlas-Launch-Review_Summary.md": {
+      "processed_at": "2026-06-07T00:14:26Z",
+      "size": 1805,
+      "affected_articles": [
+        "projects/caliper-atlas.md",
+        "projects/caliper-beacon.md",
+        "projects/caliper-platform-migration.md"
+      ]
+    },
+    "email/2026-05-01_Caliper-Weekly-Digest_Email.md": {
+      "processed_at": "2026-06-07T00:14:26Z",
+      "size": 1435,
+      "affected_articles": [
+        "projects/caliper-atlas.md",
+        "projects/caliper-beacon.md",
+        "projects/caliper-platform-migration.md"
+      ]
+    },
+    "slack/2026-05-28_Caliper-Engineering-Slack-Digest_Summary.md": {
+      "processed_at": "2026-06-07T00:14:26Z",
+      "size": 1423,
+      "affected_articles": [
+        "projects/caliper-atlas.md",
+        "projects/caliper-beacon.md",
+        "projects/caliper-platform-migration.md"
+      ]
+    },
+    "calls/2026-06-06_john-brophy-parental-leave-july-october-2026_Voice-Note.md": {
+      "processed_at": "2026-06-07T00:25:54Z",
+      "size": 256,
+      "affected_articles": [
+        "wiki/people/john-brophy.md"
+      ]
+    }
+  }
+}

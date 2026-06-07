@@ -1,11 +1,15 @@
-"""Wiki loading + retrieval tools exposed to the realtime voice model.
+"""Wiki loading, retrieval, and maintenance tools for the realtime voice model.
 
 The model is given a compact "map" of the wiki (all INDEX files + every
-article's TLDR) in its system instructions, then calls two tools to pull
-detail on demand:
+article's TLDR) in its system instructions, then calls tools on demand:
 
-  - search_wiki(query)  -> ranked matching articles with snippets
-  - read_article(path)  -> full markdown of one article
+  Read path (query):
+    - search_wiki(query)   -> ranked matching articles with snippets
+    - read_article(path)   -> full markdown of one article
+
+  Maintain path (update):
+    - save_voice_note(...) -> write a dictated note to raw/ for later compile
+    - compile_wiki()       -> fold pending raw/ files into wiki/ articles
 
 This mirrors the read-path defined in CLAUDE.md:
 INDEX -> section INDEX -> TLDRs -> full article.
@@ -15,17 +19,27 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from datetime import date
 from pathlib import Path
+
+import wiki_compiler
 
 # Resolve the wiki directory. Defaults to ../wiki relative to this file so the
 # app works from a fresh clone; override with WIKI_VOICE_WIKI_DIR.
+REPO_ROOT = Path(__file__).resolve().parent.parent
 WIKI_ROOT = Path(
-    os.environ.get("WIKI_VOICE_WIKI_DIR", Path(__file__).resolve().parent.parent / "wiki")
+    os.environ.get("WIKI_VOICE_WIKI_DIR", REPO_ROOT / "wiki")
 ).resolve()
+RAW_ROOT = (REPO_ROOT / "raw").resolve()
 
 MAX_ARTICLE_CHARS = 8000  # cap a single read so one big article can't blow the budget
 MAX_SEARCH_RESULTS = 5
 SNIPPET_RADIUS = 160
+
+RAW_FOLDERS = frozenset({"calls", "email", "docs", "slack"})
+BLOCKING_TOOLS = frozenset({"compile_wiki", "save_voice_note"})
+SESSION_REFRESH_TOOLS = frozenset({"compile_wiki"})
 
 
 def _all_markdown() -> list[Path]:
@@ -58,6 +72,14 @@ def _safe_resolve(rel_path: str) -> Path | None:
     return candidate
 
 
+def _slugify(text: str, max_len: int = 48) -> str:
+    text = text.strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    if not text:
+        text = "note"
+    return text[:max_len].strip("-") or "note"
+
+
 def build_system_context() -> str:
     """Compact map of the wiki for the model's instructions (gets cached)."""
     lines: list[str] = []
@@ -83,6 +105,12 @@ def build_system_context() -> str:
             "## Articles\n\n(The wiki currently has no articles yet - only the "
             "section scaffolding. Say so plainly if asked about content.)"
         )
+
+    pending = wiki_compiler.find_pending_sources()
+    if pending:
+        lines.append("\n## Pending compile (raw/ not yet in wiki)\n")
+        for item in pending:
+            lines.append(f"- `{item['path']}` ({item['reason']})")
 
     return "\n".join(lines)
 
@@ -140,6 +168,64 @@ def read_article(path: str) -> str:
     )
 
 
+def save_voice_note(content: str, title: str = "", folder: str = "calls") -> str:
+    """Save a dictated note to raw/ for the next compile."""
+    content = (content or "").strip()
+    if not content:
+        return json.dumps({"error": "content is required"})
+
+    folder = (folder or "calls").strip().lower()
+    if folder not in RAW_FOLDERS:
+        return json.dumps(
+            {
+                "error": f"folder must be one of: {', '.join(sorted(RAW_FOLDERS))}",
+            }
+        )
+
+    title = (title or "").strip()
+    if not title:
+        title = " ".join(content.split()[:6])
+    slug = _slugify(title)
+
+    today = date.today().isoformat()
+    dest_dir = RAW_ROOT / folder
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    base_name = f"{today}_{slug}_Voice-Note.md"
+    dest = dest_dir / base_name
+    counter = 2
+    while dest.exists():
+        dest = dest_dir / f"{today}_{slug}_Voice-Note_{counter}.md"
+        counter += 1
+
+    body = (
+        f"# Voice Note: {title}\n\n"
+        f"**Recorded:** {today}\n"
+        f"**Source:** voice\n\n"
+        f"## Content\n\n"
+        f"{content}\n"
+    )
+    dest.write_text(body, encoding="utf-8")
+
+    rel = dest.relative_to(REPO_ROOT).as_posix()
+    return json.dumps(
+        {
+            "status": "saved",
+            "path": rel,
+            "message": (
+                f"Saved to {rel}. Call compile_wiki to fold it into the wiki, "
+                "or ask the user if they want you to compile now."
+            ),
+        }
+    )
+
+
+def compile_wiki() -> str:
+    """Run the incremental wiki compiler on pending raw/ files."""
+    result = wiki_compiler.run_compile()
+    return json.dumps(result)
+
+
 # --- tool registry shared with the realtime client -------------------------
 
 TOOL_SCHEMAS = [
@@ -182,11 +268,56 @@ TOOL_SCHEMAS = [
             "required": ["path"],
         },
     },
+    {
+        "type": "function",
+        "name": "save_voice_note",
+        "description": (
+            "Save something the user wants remembered into raw/ as a voice note. "
+            "Use when they say 'remember', 'note that', 'add to the wiki', or "
+            "dictate new facts, decisions, or updates. Does not update wiki "
+            "articles directly — call compile_wiki afterward (offer to do so)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The fact or note to save, in clear prose.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Short title for the note (optional).",
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "raw/ subfolder: calls (default), docs, email, slack.",
+                },
+            },
+            "required": ["content"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "compile_wiki",
+        "description": (
+            "Compile pending raw/ files into wiki/ articles. Takes several "
+            "seconds. Use after save_voice_note, or when the user asks to "
+            "'update the wiki', 'compile', or 'sync'. Tell the user you're "
+            "working on it before calling."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+    },
 ]
 
 _DISPATCH = {
     "search_wiki": lambda args: search_wiki(args.get("query", "")),
     "read_article": lambda args: read_article(args.get("path", "")),
+    "save_voice_note": lambda args: save_voice_note(
+        args.get("content", ""),
+        args.get("title", ""),
+        args.get("folder", "calls"),
+    ),
+    "compile_wiki": lambda _args: compile_wiki(),
 }
 
 
@@ -200,22 +331,37 @@ def call_tool(name: str, args: dict) -> str:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
+def is_blocking_tool(name: str) -> bool:
+    return name in BLOCKING_TOOLS
+
+
+def should_refresh_session(name: str) -> bool:
+    return name in SESSION_REFRESH_TOOLS
+
+
 INSTRUCTIONS = """\
 You are the voice of John's personal knowledge base ("the wiki"). You answer \
-spoken questions about his projects, people, decisions, concepts, and timeline.
+spoken questions and help maintain the wiki by voice.
 
-Rules:
-- Answer ONLY from the wiki. Use the search_wiki and read_article tools to \
-ground every factual claim. Do not invent or generalize beyond what the \
-articles say.
-- A map of the wiki (indexes + every article's TLDR) is included below. Use it \
-to decide what to read. If a TLDR already answers the question, you may answer \
-directly; otherwise read the article.
-- If the wiki does not contain the answer, say so plainly ("I don't have that \
-in the wiki yet"). Never guess.
-- This is a voice conversation. Keep answers short and natural - usually one to \
-three sentences. Offer to go deeper rather than dumping everything.
-- When useful, mention which article the answer came from by its short name.
+Query rules:
+- Answer factual questions ONLY from the wiki. Use search_wiki and read_article \
+to ground every claim. Do not invent beyond what articles say.
+- A map of the wiki (indexes + TLDRs + pending raw files) is below. Use it to \
+decide what to read.
+- If the wiki does not contain the answer, say so plainly. Never guess.
+
+Maintain rules:
+- When John wants to remember something ("note that", "remember", "add this"), \
+call save_voice_note with clear prose, then offer to compile_wiki.
+- compile_wiki takes several seconds — say "Give me a moment, updating the wiki" \
+before calling it.
+- After compile_wiki succeeds, briefly confirm what changed.
+- Raw files are source material; wiki articles are compiled from them. Never \
+claim something is in the wiki until compile_wiki has run.
+
+Voice style:
+- Keep answers short and natural — one to three sentences. Offer to go deeper.
+- When useful, mention which article an answer came from.
 
 --- WIKI MAP ---
 {wiki_map}
